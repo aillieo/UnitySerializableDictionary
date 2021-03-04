@@ -1,19 +1,22 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
-using UnityEngine.Serialization;
 
 namespace AillieoUtils
 {
     [Serializable]
-    public class SerializableDictionary<TKey, TValue> : IDictionary<TKey, TValue>, ISerializationCallbackReceiver
+    public abstract class SerializableDictionary<TKey, TValue> : IDictionary<TKey, TValue>, ISerializationCallbackReceiver
     {
         private readonly Dictionary<TKey, TValue> dictionary = new Dictionary<TKey, TValue>();
         [SerializeField]
-        private readonly List<TKey> keys = new List<TKey>();
+        private List<TKey> keys = new List<TKey>();
         [SerializeField]
-        private readonly List<TValue> values = new List<TValue>();
+        private List<TValue> values = new List<TValue>();
+
+        [SerializeField]
+        private bool invalidFlag;
 
         public TValue this[TKey key]
         {
@@ -98,9 +101,17 @@ namespace AillieoUtils
 
         public void OnBeforeSerialize()
         {
-            keys.Clear();
-            values.Clear();
-            foreach(var pair in dictionary)
+            if(invalidFlag)
+            {
+                return;
+            }
+            else
+            {
+                keys.Clear();
+                values.Clear();
+            }
+
+            foreach (var pair in dictionary)
             {
                 keys.Add(pair.Key);
                 values.Add(pair.Value);
@@ -111,14 +122,31 @@ namespace AillieoUtils
         {
             dictionary.Clear();
 
+            invalidFlag = false;
+
             if (keys.Count != values.Count)
             {
-                throw new Exception("invalid serialized data");
+                throw new Exception("Invalid serialized data");
             }
 
             for (var i = 0; i < keys.Count; ++i)
             {
-                dictionary[keys[i]] = values[i];
+                if(!dictionary.ContainsKey(keys[i]))
+                {
+                    dictionary.Add(keys[i], values[i]);
+                }
+                else
+                {
+                    invalidFlag = true;
+                    Debug.LogWarning($"Duplicate keys exist: {keys[i]}");
+                    continue;
+                }
+            }
+
+            if(!invalidFlag)
+            {
+                keys.Clear();
+                values.Clear();
             }
         }
     }
