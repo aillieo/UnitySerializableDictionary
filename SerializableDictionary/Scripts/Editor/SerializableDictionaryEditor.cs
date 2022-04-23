@@ -5,13 +5,15 @@ using UnityEditor;
 
 namespace AillieoUtils
 {
-    [CustomPropertyDrawer(typeof(SerializableDictionary<,>),true)]
+    [CustomPropertyDrawer(typeof(SerializableDictionary<,>), true)]
     internal class SerializableDictionaryEditor : PropertyDrawer
     {
+        private readonly Dictionary<string, bool> expandState = new Dictionary<string, bool>();
+
         private static readonly float spaceHeight = 4;
         private static readonly float spaceWidth = 4;
         private static readonly float buttonWidth = EditorGUIUtility.singleLineHeight;
-        private static readonly float folderWidth = EditorGUIUtility.singleLineHeight * 0.5f;
+        private static readonly float folderWidth = EditorGUIUtility.singleLineHeight * 1.0f;
 
         public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
         {
@@ -24,13 +26,15 @@ namespace AillieoUtils
             height += spaceHeight;
             for (int i = 0; i < count; ++i)
             {
-                height += EditorGUI.GetPropertyHeight(keys.GetArrayElementAtIndex(i));
-                SerializedProperty value = values.GetArrayElementAtIndex(i);
-                if (value.isExpanded)
+                SerializedProperty key = keys.GetArrayElementAtIndex(i);
+                height += EditorGUI.GetPropertyHeight(key);
+                string keyPropertyPath = key.propertyPath;
+
+                if (expandState.TryGetValue(keyPropertyPath, out bool expand) && expand)
                 {
-                    height += EditorGUI.GetPropertyHeight(value, true);
-                    height -= EditorGUIUtility.singleLineHeight;
+                    height += EditorGUI.GetPropertyHeight(values.GetArrayElementAtIndex(i));
                 }
+
                 height += spaceHeight;
             }
 
@@ -75,6 +79,7 @@ namespace AillieoUtils
                 SerializedProperty value = values.GetArrayElementAtIndex(i);
 
                 float heightForKey = EditorGUI.GetPropertyHeight(key);
+
                 rect.height = heightForKey;
                 EditorGUI.PropertyField(rect, key, GUIContent.none);
 
@@ -82,40 +87,47 @@ namespace AillieoUtils
                 folder.y = rect.y;
 
                 rect.y += heightForKey;
+                rect.height = heightForKey;
 
-                if (value.isExpanded)
+                string keyPropertyPath = key.propertyPath;
+                if (!expandState.TryGetValue(keyPropertyPath, out bool expand))
                 {
-                    SerializedProperty valueCopy = value.Copy();
-                    int depth = valueCopy.depth;
+                    expand = false;
+                }
 
-                    if (valueCopy.NextVisible(valueCopy.isExpanded))
+                if (expand)
+                {
+                    float heightForValue = EditorGUI.GetPropertyHeight(value);
+                    rect.height = heightForValue;
+                    bool addIndent = value.hasVisibleChildren;
+                    if (addIndent)
                     {
-                        do
-                        {
-                            if (valueCopy.depth <= depth)
-                            {
-                                break;
-                            }
+                        rect.x += folderWidth;
+                        rect.width -= folderWidth;
 
-                            float h = EditorGUI.GetPropertyHeight(valueCopy, false);
-                            rect.height = h;
-                            EditorGUI.PropertyField(rect, valueCopy);
-                            rect.y += h;
-                            rect.y += EditorGUIUtility.standardVerticalSpacing;
-                        }
-                        while (valueCopy.NextVisible(valueCopy.isExpanded));
+                        EditorGUI.PropertyField(rect, value, true);
+
+                        rect.x -= folderWidth;
+                        rect.width += folderWidth;
                     }
+                    else
+                    {
+                        EditorGUI.PropertyField(rect, value, GUIContent.none);
+                    }
+
+                    rect.y += heightForValue;
                 }
 
                 folder.height = rect.y - folder.y;
 
-                if (GUI.Button(folder, ""))
+                if (GUI.Button(folder, expand ? "-" : "+"))
                 {
-                    value.isExpanded = !value.isExpanded;
+                    expand = !expand;
+                    expandState[keyPropertyPath] = expand;
                     return;
                 }
 
-                if (GUI.Button(button, "-"))
+                if (GUI.Button(button, "x"))
                 {
                     keys.DeleteArrayElementAtIndex(i);
                     values.DeleteArrayElementAtIndex(i);
@@ -125,7 +137,8 @@ namespace AillieoUtils
                 rect.y += spaceHeight;
             }
 
-            if(property.FindPropertyRelative("invalidFlag").boolValue)
+            rect.height = EditorGUIUtility.singleLineHeight;
+            if (property.FindPropertyRelative("invalidFlag").boolValue)
             {
                 EditorGUI.HelpBox(rect, "Duplicate keys exist", MessageType.Error);
             }
