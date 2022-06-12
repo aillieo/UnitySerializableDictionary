@@ -126,7 +126,12 @@ namespace AillieoUtils
 
             if (keys.Count != values.Count)
             {
-                throw new Exception("Invalid serialized data");
+                string message = $"Invalid serialized data: {keys.Count} key(s) while {values.Count} value(s)";
+#if UNITY_EDITOR
+                Debug.LogWarning(message);
+#else
+                throw new Exception(message);
+#endif
             }
 
             for (var i = 0; i < keys.Count; ++i)
@@ -138,7 +143,6 @@ namespace AillieoUtils
                 else
                 {
                     invalidFlag = true;
-                    Debug.LogWarning($"Duplicate keys exist: {keys[i]}");
                     continue;
                 }
             }
