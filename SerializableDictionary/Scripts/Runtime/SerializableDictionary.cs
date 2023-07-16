@@ -11,9 +11,9 @@ namespace AillieoUtils
     {
         private readonly Dictionary<TKey, TValue> dictionary = new Dictionary<TKey, TValue>();
         [SerializeField]
-        private List<TKey> keys = new List<TKey>();
+        private List<TKey> keys;
         [SerializeField]
-        private List<TValue> values = new List<TValue>();
+        private List<TValue> values;
 
         [SerializeField]
         private bool invalidFlag;
