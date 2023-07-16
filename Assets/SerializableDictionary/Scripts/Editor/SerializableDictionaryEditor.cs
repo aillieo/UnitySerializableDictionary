@@ -112,6 +112,12 @@ namespace AillieoUtils
         {
             SerializedProperty keys = serializedProperty.FindPropertyRelative("keys");
             SerializedProperty values = serializedProperty.FindPropertyRelative("values");
+
+            if (index >= keys.arraySize || index >= values.arraySize)
+            {
+                return 0;
+            }
+
             SerializedProperty key = keys.GetArrayElementAtIndex(index);
             SerializedProperty value = values.GetArrayElementAtIndex(index);
 
@@ -187,6 +193,8 @@ namespace AillieoUtils
 
         public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
         {
+            EditorGUI.BeginProperty(position, label, property);
+
             this.serializedProperty = property;
             this.label = label;
 
@@ -246,6 +254,8 @@ namespace AillieoUtils
                     EditorGUI.PropertyField(rect, value, GUIContent.none, value.isExpanded);
                 }
             }
+
+            EditorGUI.EndProperty();
         }
 
         private float GetHeightForPair(SerializedProperty key, SerializedProperty value)
@@ -293,8 +303,8 @@ namespace AillieoUtils
             Event evt = Event.current;
             Rect dropArea = position;
             Color guiColor = GUI.color;
-            GUI.color = Color.yellow;
-            GUI.Box(dropArea, "Drop objects hero to add new entries", new GUIStyle("box") { alignment = TextAnchor.MiddleCenter });
+            GUI.color = Color.gray;
+            GUI.Box(dropArea, "Drop objects here to add new entries", new GUIStyle("box") { alignment = TextAnchor.MiddleCenter });
             GUI.color = guiColor;
 
             switch (evt.type)
