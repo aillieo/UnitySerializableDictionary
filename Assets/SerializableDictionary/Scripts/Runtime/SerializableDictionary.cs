@@ -1,11 +1,21 @@
-using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.Linq;
-using UnityEngine;
+// -----------------------------------------------------------------------
+// <copyright file="SerializableDictionary.cs" company="AillieoTech">
+// Copyright (c) AillieoTech. All rights reserved.
+// </copyright>
+// -----------------------------------------------------------------------
 
 namespace AillieoUtils
 {
+    using System;
+    using System.Collections;
+    using System.Collections.Generic;
+    using UnityEngine;
+
+    /// <summary>
+    /// Represents a serializable dictionary that can be used in Unity projects.
+    /// </summary>
+    /// <typeparam name="TKey">The type of the dictionary keys.</typeparam>
+    /// <typeparam name="TValue">The type of the dictionary values.</typeparam>
     [Serializable]
     public abstract class SerializableDictionary<TKey, TValue> : IDictionary<TKey, TValue>, ISerializationCallbackReceiver
     {
@@ -18,115 +28,133 @@ namespace AillieoUtils
         [SerializeField]
         private bool invalidFlag;
 
-        public TValue this[TKey key]
-        {
-            get { return dictionary[key]; }
-            set { dictionary[key] = value; }
-        }
-
+        /// <inheritdoc/>
         public ICollection<TKey> Keys
         {
-            get { return dictionary.Keys; }
+            get { return this.dictionary.Keys; }
         }
 
+        /// <inheritdoc/>
         public ICollection<TValue> Values
         {
-            get { return dictionary.Values; }
+            get { return this.dictionary.Values; }
         }
 
-        public void Add(TKey key, TValue value)
-        {
-            dictionary.Add(key, value);
-        }
-
-        public bool ContainsKey(TKey key)
-        {
-            return dictionary.ContainsKey(key);
-        }
-
-        public bool Remove(TKey key)
-        {
-            return dictionary.Remove(key);
-        }
-
-        public bool TryGetValue(TKey key, out TValue value)
-        {
-            return dictionary.TryGetValue(key, out value);
-        }
-
-        public void Clear()
-        {
-            dictionary.Clear();
-        }
-
+        /// <inheritdoc/>
         public int Count
         {
-            get { return dictionary.Count; }
+            get { return this.dictionary.Count; }
         }
 
+        /// <inheritdoc/>
         bool ICollection<KeyValuePair<TKey, TValue>>.IsReadOnly
         {
-            get { return (dictionary as ICollection<KeyValuePair<TKey, TValue>>).IsReadOnly; }
+            get { return (this.dictionary as ICollection<KeyValuePair<TKey, TValue>>).IsReadOnly; }
         }
 
+        /// <inheritdoc/>
+        public TValue this[TKey key]
+        {
+            get { return this.dictionary[key]; }
+            set { this.dictionary[key] = value; }
+        }
+
+        /// <inheritdoc/>
+        public void Add(TKey key, TValue value)
+        {
+            this.dictionary.Add(key, value);
+        }
+
+        /// <inheritdoc/>
+        public bool ContainsKey(TKey key)
+        {
+            return this.dictionary.ContainsKey(key);
+        }
+
+        /// <inheritdoc/>
+        public bool Remove(TKey key)
+        {
+            return this.dictionary.Remove(key);
+        }
+
+        /// <inheritdoc/>
+        public bool TryGetValue(TKey key, out TValue value)
+        {
+            return this.dictionary.TryGetValue(key, out value);
+        }
+
+        /// <inheritdoc/>
+        public void Clear()
+        {
+            this.dictionary.Clear();
+        }
+
+        /// <inheritdoc/>
         void ICollection<KeyValuePair<TKey, TValue>>.Add(KeyValuePair<TKey, TValue> item)
         {
-            (dictionary as ICollection<KeyValuePair<TKey, TValue>>).Add(item);
+            (this.dictionary as ICollection<KeyValuePair<TKey, TValue>>).Add(item);
         }
 
+        /// <inheritdoc/>
         bool ICollection<KeyValuePair<TKey, TValue>>.Contains(KeyValuePair<TKey, TValue> item)
         {
-            return (dictionary as ICollection<KeyValuePair<TKey, TValue>>).Contains(item);
+            return (this.dictionary as ICollection<KeyValuePair<TKey, TValue>>).Contains(item);
         }
 
+        /// <inheritdoc/>
         void ICollection<KeyValuePair<TKey, TValue>>.CopyTo(KeyValuePair<TKey, TValue>[] array, int arrayIndex)
         {
-            (dictionary as ICollection<KeyValuePair<TKey, TValue>>).CopyTo(array, arrayIndex);
+            (this.dictionary as ICollection<KeyValuePair<TKey, TValue>>).CopyTo(array, arrayIndex);
         }
 
+        /// <inheritdoc/>
         bool ICollection<KeyValuePair<TKey, TValue>>.Remove(KeyValuePair<TKey, TValue> item)
         {
-            return (dictionary as ICollection<KeyValuePair<TKey, TValue>>).Remove(item);
+            return (this.dictionary as ICollection<KeyValuePair<TKey, TValue>>).Remove(item);
         }
 
+        /// <inheritdoc/>
         IEnumerator<KeyValuePair<TKey, TValue>> IEnumerable<KeyValuePair<TKey, TValue>>.GetEnumerator()
         {
-            return (dictionary as IEnumerable<KeyValuePair<TKey, TValue>>).GetEnumerator();
+            return (this.dictionary as IEnumerable<KeyValuePair<TKey, TValue>>).GetEnumerator();
         }
 
+        /// <inheritdoc/>
         public IEnumerator GetEnumerator()
         {
-            return dictionary.GetEnumerator();
+            return this.dictionary.GetEnumerator();
         }
 
+        /// <inheritdoc/>
         public void OnBeforeSerialize()
         {
-            if(invalidFlag)
+            if (this.invalidFlag)
             {
                 return;
             }
             else
             {
-                keys.Clear();
-                values.Clear();
+                this.keys.Clear();
+                this.values.Clear();
             }
 
-            foreach (var pair in dictionary)
+            foreach (var pair in this.dictionary)
             {
-                keys.Add(pair.Key);
-                values.Add(pair.Value);
+                this.keys.Add(pair.Key);
+                this.values.Add(pair.Value);
             }
         }
 
+        /// <inheritdoc/>
         public void OnAfterDeserialize()
         {
-            dictionary.Clear();
+            this.dictionary.Clear();
 
-            invalidFlag = false;
+            this.invalidFlag = false;
 
-            if (keys.Count != values.Count)
+            if (this.keys.Count != this.values.Count)
             {
-                string message = $"Invalid serialized data: {keys.Count} key(s) while {values.Count} value(s)";
+                string message = $"Invalid serialized data: {this.keys.Count} key(s) while {this.values.Count} value(s)";
 #if UNITY_EDITOR
                 Debug.LogWarning(message);
 #else
@@ -134,23 +162,23 @@ namespace AillieoUtils
 #endif
             }
 
-            for (var i = 0; i < keys.Count; ++i)
+            for (var i = 0; i < this.keys.Count; ++i)
             {
-                if(!dictionary.ContainsKey(keys[i]))
+                if (!this.dictionary.ContainsKey(this.keys[i]))
                 {
-                    dictionary.Add(keys[i], values[i]);
+                    this.dictionary.Add(this.keys[i], this.values[i]);
                 }
                 else
                 {
-                    invalidFlag = true;
+                    this.invalidFlag = true;
                     continue;
                 }
             }
 
-            if(!invalidFlag)
+            if (!this.invalidFlag)
             {
-                keys.Clear();
-                values.Clear();
+                this.keys.Clear();
+                this.values.Clear();
             }
         }
     }
