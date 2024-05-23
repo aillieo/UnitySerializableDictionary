@@ -8,9 +8,6 @@ namespace AillieoUtils
 {
     using System;
 
-    /// <summary>
-    /// Represents a serializable dictionary that maps strings to UnityEngine.Objects.
-    /// </summary>
     [Serializable]
     public class StringToObjectDictionary
         : SerializableDictionary<string, UnityEngine.Object>
