@@ -1,8 +1,6 @@
-using AillieoUtils;
-using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
 using System;
+using AillieoUtils;
+using UnityEngine;
 
 public class TestScript : MonoBehaviour
 {

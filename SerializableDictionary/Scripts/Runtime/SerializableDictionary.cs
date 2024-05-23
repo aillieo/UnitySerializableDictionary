@@ -114,15 +114,15 @@ namespace AillieoUtils
         }
 
         /// <inheritdoc/>
-        IEnumerator<KeyValuePair<TKey, TValue>> IEnumerable<KeyValuePair<TKey, TValue>>.GetEnumerator()
+        public IEnumerator<KeyValuePair<TKey, TValue>> GetEnumerator()
         {
-            return (this.dictionary as IEnumerable<KeyValuePair<TKey, TValue>>).GetEnumerator();
+            return this.dictionary.GetEnumerator();
         }
 
         /// <inheritdoc/>
-        public IEnumerator GetEnumerator()
+        IEnumerator IEnumerable.GetEnumerator()
         {
-            return this.dictionary.GetEnumerator();
+            return this.GetEnumerator();
         }
 
         /// <inheritdoc/>
@@ -134,8 +134,28 @@ namespace AillieoUtils
             }
             else
             {
-                this.keys.Clear();
-                this.values.Clear();
+                if (this.keys != null)
+                {
+                    this.keys.Clear();
+                }
+
+                if (this.values != null)
+                {
+                    this.values.Clear();
+                }
+            }
+
+            if (this.dictionary.Count > 0)
+            {
+                if (this.keys == null)
+                {
+                    this.keys = new List<TKey>();
+                }
+
+                if (this.values == null)
+                {
+                    this.values = new List<TValue>();
+                }
             }
 
             foreach (var pair in this.dictionary)
@@ -154,7 +174,7 @@ namespace AillieoUtils
 
             if (this.keys.Count != this.values.Count)
             {
-                string message = $"Invalid serialized data: {this.keys.Count} key(s) while {this.values.Count} value(s)";
+                var message = $"Invalid serialized data: {this.keys.Count} key(s) while {this.values.Count} value(s)";
 #if UNITY_EDITOR
                 Debug.LogWarning(message);
 #else
