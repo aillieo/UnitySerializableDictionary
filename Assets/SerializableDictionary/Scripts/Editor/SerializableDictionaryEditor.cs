@@ -16,29 +16,10 @@ namespace AillieoUtils
     [CustomPropertyDrawer(typeof(SerializableDictionary<,>), true)]
     internal class SerializableDictionaryEditor : PropertyDrawer
     {
-        private SerializedProperty serializedProperty;
-        private GUIContent label;
-        private ReorderableList reorderableList;
-
         private static readonly float spaceHeight = EditorGUIUtility.singleLineHeight * 0.5f;
         private static readonly float dropAreaHeight = EditorGUIUtility.singleLineHeight * 2f;
         private static readonly Color lightGray = new Color(0.9f, 0.9f, 0.9f, 1f);
         private static readonly float emptyHeight = 24f;
-
-        private Type cachedValueType;
-
-        private Type valueType
-        {
-            get
-            {
-                if (this.cachedValueType == null)
-                {
-                    this.cachedValueType = GetValueType(this.fieldInfo.FieldType);
-                }
-
-                return this.cachedValueType;
-            }
-        }
 
         private static readonly HashSet<SerializedPropertyType> shortTypes = new HashSet<SerializedPropertyType>()
         {
@@ -53,44 +34,81 @@ namespace AillieoUtils
             SerializedPropertyType.ObjectReference,
         };
 
+        private SerializedProperty serializedProperty;
+
+        private static readonly Dictionary<string, WeakReference<ReorderableList>> listCache = new Dictionary<string, WeakReference<ReorderableList>>();
+        private static readonly Dictionary<string, Type> valueTypeCache = new Dictionary<string, Type>();
+
+        private Type GetValueTypeByProperty(SerializedProperty property)
+        {
+            var key = property.propertyPath;
+            if (!valueTypeCache.TryGetValue(key, out var valueType))
+            {
+                valueType = GetValueType(property.serializedObject.targetObject.GetType());
+                valueTypeCache[key] = valueType;
+            }
+
+            return valueType;
+        }
+
+        private ReorderableList GetReorderableListByProperty(SerializedProperty property)
+        {
+            var key = property.propertyPath;
+            if (!listCache.TryGetValue(key, out var weakList))
+            {
+                var newlist = this.CreateReorderableList(property);
+                weakList = new WeakReference<ReorderableList>(newlist);
+                listCache[key] = weakList;
+            }
+
+            if (weakList.TryGetTarget(out var list) && list != null && list.serializedProperty != null && list.serializedProperty.serializedObject == property.serializedObject)
+            {
+                return list;
+            }
+            else
+            {
+                list = this.CreateReorderableList(property);
+                weakList.SetTarget(list);
+            }
+
+            return list;
+        }
+
         public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
         {
             this.serializedProperty = property;
-            this.label = label;
 
             if (!this.serializedProperty.isExpanded)
             {
                 return EditorGUIUtility.singleLineHeight;
             }
 
-            if (this.reorderableList == null)
-            {
-                this.CreateReorderableList();
-            }
+            var reorderableList = this.GetReorderableListByProperty(property);
 
-            var keys = property.FindPropertyRelative("keys");
-            var values = property.FindPropertyRelative("values");
+            SerializedProperty keys = property.FindPropertyRelative("keys");
+            SerializedProperty values = property.FindPropertyRelative("values");
 
             var count = keys.arraySize;
 
             float height = 0;
             height += EditorGUIUtility.singleLineHeight;
 
-            height += this.GetHeightForAllPairs();
+            height += this.GetHeightForAllPairs(reorderableList);
 
             height += spaceHeight;
 
-            var drawDropArea = typeof(UnityEngine.Object).IsAssignableFrom(this.valueType);
+            var valueType = this.GetValueTypeByProperty(property);
+            var drawDropArea = typeof(UnityEngine.Object).IsAssignableFrom(valueType);
             if (drawDropArea)
             {
                 height += dropAreaHeight;
             }
 
-            var selected = this.reorderableList.index;
+            var selected = reorderableList.index;
             if (selected >= 0 && selected < count)
             {
-                var key = keys.GetArrayElementAtIndex(selected);
-                var value = values.GetArrayElementAtIndex(selected);
+                SerializedProperty key = keys.GetArrayElementAtIndex(selected);
+                SerializedProperty value = values.GetArrayElementAtIndex(selected);
                 var drawAsSingleLine = DrawAsSingleLine(key.propertyType, value.propertyType);
                 if (!drawAsSingleLine)
                 {
@@ -102,44 +120,188 @@ namespace AillieoUtils
             return height;
         }
 
-        private void CreateReorderableList()
+        public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
         {
-            this.reorderableList = new ReorderableList(this.serializedProperty.serializedObject, this.serializedProperty.FindPropertyRelative("keys"));
-            this.reorderableList.drawElementCallback = this.DrawElementCallback;
-            this.reorderableList.elementHeightCallback = this.ElementHeightCallback;
-            this.reorderableList.onAddCallback = this.OnAddCallback;
-            this.reorderableList.onRemoveCallback = this.OnRemoveCallback;
-            this.reorderableList.onReorderCallbackWithDetails = this.OnReorderCallbackWithDetails;
-            this.reorderableList.headerHeight = 1f;
-            this.reorderableList.drawHeaderCallback = this.DrawHeaderCallback;
+            EditorGUI.BeginProperty(position, label, property);
+
+            this.serializedProperty = property;
+
+            GUI.Box(position, GUIContent.none);
+
+            SerializedProperty keys = property.FindPropertyRelative("keys");
+            SerializedProperty values = property.FindPropertyRelative("values");
+
+            var count = keys.arraySize;
+
+            Rect rect = position;
+            rect.height = EditorGUIUtility.singleLineHeight;
+
+            this.serializedProperty.isExpanded = GUI.Toggle(rect, this.serializedProperty.isExpanded, $"{label.text} ({count})", "BoldLabel");
+            if (!this.serializedProperty.isExpanded)
+            {
+                return;
+            }
+
+            var reorderableList = this.GetReorderableListByProperty(property);
+
+            rect.y += EditorGUIUtility.singleLineHeight;
+
+            reorderableList.DoList(rect);
+
+            rect.y += this.GetHeightForAllPairs(reorderableList);
+
+            var valueType = this.GetValueTypeByProperty(property);
+            var drawDropArea = typeof(UnityEngine.Object).IsAssignableFrom(valueType);
+
+            if (property.FindPropertyRelative("invalidFlag").boolValue)
+            {
+                // rect.height = EditorGUIUtility.singleLineHeight;
+                // EditorGUI.HelpBox(rect, "Duplicate keys exist", MessageType.Error);
+            }
+
+            if (drawDropArea)
+            {
+                rect.y += spaceHeight;
+                rect.height = dropAreaHeight;
+                this.DrawDropArea(rect, property);
+                rect.y += dropAreaHeight;
+            }
+
+            var selected = reorderableList.index;
+            if (selected >= 0 && selected < count)
+            {
+                SerializedProperty key = keys.GetArrayElementAtIndex(selected);
+                SerializedProperty value = values.GetArrayElementAtIndex(selected);
+                var drawAsSingleLine = DrawAsSingleLine(key.propertyType, value.propertyType);
+                if (!drawAsSingleLine)
+                {
+                    rect.y += spaceHeight;
+                    rect.height = EditorGUI.GetPropertyHeight(value, GUIContent.none, value.isExpanded);
+                    EditorGUI.PropertyField(rect, value, GUIContent.none, value.isExpanded);
+                }
+            }
+
+            EditorGUI.EndProperty();
+        }
+
+        protected void DrawDropArea(Rect position, SerializedProperty property)
+        {
+            Event evt = Event.current;
+            Rect dropArea = position;
+            Color guiColor = GUI.color;
+            GUI.color = Color.gray;
+            GUI.Box(dropArea, "Drop objects here to add new entries", new GUIStyle("box") { alignment = TextAnchor.MiddleCenter });
+            GUI.color = guiColor;
+
+            var valueType = this.GetValueTypeByProperty(property);
+
+            switch (evt.type)
+            {
+            case EventType.DragUpdated:
+            case EventType.DragPerform:
+                if (dropArea.Contains(evt.mousePosition) &&
+                    DragAndDrop.objectReferences.Any(o => valueType.IsInstanceOfType(o)))
+                {
+                    DragAndDrop.visualMode = DragAndDropVisualMode.Copy;
+
+                    if (evt.type == EventType.DragPerform)
+                    {
+                        DragAndDrop.AcceptDrag();
+
+                        var newObjects = new HashSet<UnityEngine.Object>(DragAndDrop.objectReferences);
+                        SerializedProperty values = property.FindPropertyRelative("values");
+                        for (int i = 0, size = values.arraySize; i < size; ++i)
+                        {
+                            newObjects.Remove(values.GetArrayElementAtIndex(i).objectReferenceValue);
+                        }
+
+                        var newObjectCount = newObjects.Count;
+                        if (newObjectCount > 0)
+                        {
+                            SerializedProperty keys = property.FindPropertyRelative("keys");
+                            var oldSize = keys.arraySize;
+                            keys.arraySize += newObjectCount;
+                            values.arraySize += newObjectCount;
+                            foreach (var newObj in newObjects)
+                            {
+                                keys.GetArrayElementAtIndex(oldSize).stringValue = newObj.name;
+                                values.GetArrayElementAtIndex(oldSize).objectReferenceValue = newObj;
+                                ++oldSize;
+                            }
+                        }
+                    }
+                }
+
+                break;
+            }
+        }
+
+        private static Type GetValueType(Type propertyType)
+        {
+            while (propertyType != null)
+            {
+                if (propertyType.IsGenericType && propertyType.GetGenericTypeDefinition() == typeof(SerializableDictionary<,>))
+                {
+                    Type[] genericArgs = propertyType.GenericTypeArguments;
+                    if (genericArgs != null && genericArgs.Length == 2)
+                    {
+                        Type valueType = genericArgs[1];
+                        return valueType;
+                    }
+                }
+                else
+                {
+                    propertyType = propertyType.BaseType;
+                }
+            }
+
+            return null;
+        }
+
+        private static bool DrawAsSingleLine(SerializedPropertyType keyType, SerializedPropertyType valueType)
+        {
+            return shortTypes.Contains(keyType) && shortTypes.Contains(valueType);
+        }
+
+        private ReorderableList CreateReorderableList(SerializedProperty property)
+        {
+            var reorderableList = new ReorderableList(this.serializedProperty.serializedObject, this.serializedProperty.FindPropertyRelative("keys"));
+            reorderableList.drawElementCallback = this.DrawElementCallback;
+            reorderableList.elementHeightCallback = this.ElementHeightCallback;
+            reorderableList.onAddCallback = this.OnAddCallback;
+            reorderableList.onRemoveCallback = this.OnRemoveCallback;
+            reorderableList.onReorderCallbackWithDetails = this.OnReorderCallbackWithDetails;
+            reorderableList.headerHeight = 1f;
+            reorderableList.drawHeaderCallback = this.DrawHeaderCallback;
+            return reorderableList;
         }
 
         private float ElementHeightCallback(int index)
         {
-            var keys = this.serializedProperty.FindPropertyRelative("keys");
-            var values = this.serializedProperty.FindPropertyRelative("values");
+            SerializedProperty keys = this.serializedProperty.FindPropertyRelative("keys");
+            SerializedProperty values = this.serializedProperty.FindPropertyRelative("values");
 
             if (index >= keys.arraySize || index >= values.arraySize)
             {
                 return 0;
             }
 
-            var key = keys.GetArrayElementAtIndex(index);
-            var value = values.GetArrayElementAtIndex(index);
+            SerializedProperty key = keys.GetArrayElementAtIndex(index);
+            SerializedProperty value = values.GetArrayElementAtIndex(index);
 
             return this.GetHeightForPair(key, value);
         }
 
         private void DrawElementCallback(Rect rect, int index, bool isActive, bool isFocused)
         {
-            var keys = this.serializedProperty.FindPropertyRelative("keys");
-            var values = this.serializedProperty.FindPropertyRelative("values");
-            var key = keys.GetArrayElementAtIndex(index);
-            var value = values.GetArrayElementAtIndex(index);
+            SerializedProperty keys = this.serializedProperty.FindPropertyRelative("keys");
+            SerializedProperty values = this.serializedProperty.FindPropertyRelative("values");
+            SerializedProperty key = keys.GetArrayElementAtIndex(index);
+            SerializedProperty value = values.GetArrayElementAtIndex(index);
 
             if (DrawAsSingleLine(key.propertyType, value.propertyType))
             {
-                var half = rect;
+                Rect half = rect;
                 half.width = rect.width * 0.5f;
                 EditorGUI.PropertyField(half, key, GUIContent.none);
                 half.x += half.width;
@@ -159,8 +321,8 @@ namespace AillieoUtils
 
         private void OnAddCallback(ReorderableList list)
         {
-            var keys = this.serializedProperty.FindPropertyRelative("keys");
-            var values = this.serializedProperty.FindPropertyRelative("values");
+            SerializedProperty keys = this.serializedProperty.FindPropertyRelative("keys");
+            SerializedProperty values = this.serializedProperty.FindPropertyRelative("values");
             var count = keys.arraySize;
             keys.InsertArrayElementAtIndex(count);
             values.InsertArrayElementAtIndex(count);
@@ -168,8 +330,8 @@ namespace AillieoUtils
 
         private void OnRemoveCallback(ReorderableList list)
         {
-            var keys = this.serializedProperty.FindPropertyRelative("keys");
-            var values = this.serializedProperty.FindPropertyRelative("values");
+            SerializedProperty keys = this.serializedProperty.FindPropertyRelative("keys");
+            SerializedProperty values = this.serializedProperty.FindPropertyRelative("values");
             var index = list.index;
             var last = keys.arraySize - 1;
 
@@ -189,79 +351,12 @@ namespace AillieoUtils
 
         private void OnReorderCallbackWithDetails(ReorderableList list, int oldIndex, int newIndex)
         {
-            var values = this.serializedProperty.FindPropertyRelative("values");
+            SerializedProperty values = this.serializedProperty.FindPropertyRelative("values");
             values.MoveArrayElement(oldIndex, newIndex);
         }
 
         private void DrawHeaderCallback(Rect rect)
         {
-        }
-
-        public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
-        {
-            EditorGUI.BeginProperty(position, label, property);
-
-            this.serializedProperty = property;
-            this.label = label;
-
-            GUI.Box(position, GUIContent.none);
-
-            var keys = property.FindPropertyRelative("keys");
-            var values = property.FindPropertyRelative("values");
-
-            var count = keys.arraySize;
-
-            var rect = position;
-            rect.height = EditorGUIUtility.singleLineHeight;
-
-            this.serializedProperty.isExpanded = GUI.Toggle(rect, this.serializedProperty.isExpanded, $"{label.text} ({count})", "BoldLabel");
-            if (!this.serializedProperty.isExpanded)
-            {
-                return;
-            }
-
-            if (this.reorderableList == null)
-            {
-                this.CreateReorderableList();
-            }
-
-            rect.y += EditorGUIUtility.singleLineHeight;
-
-            this.reorderableList.DoList(rect);
-
-            rect.y += this.GetHeightForAllPairs();
-
-            var drawDropArea = typeof(UnityEngine.Object).IsAssignableFrom(this.valueType);
-
-            if (property.FindPropertyRelative("invalidFlag").boolValue)
-            {
-                // rect.height = EditorGUIUtility.singleLineHeight;
-                // EditorGUI.HelpBox(rect, "Duplicate keys exist", MessageType.Error);
-            }
-
-            if (drawDropArea)
-            {
-                rect.y += spaceHeight;
-                rect.height = dropAreaHeight;
-                this.DrawDropArea(rect, property);
-                rect.y += dropAreaHeight;
-            }
-
-            var selected = this.reorderableList.index;
-            if (selected >= 0 && selected < count)
-            {
-                var key = keys.GetArrayElementAtIndex(selected);
-                var value = values.GetArrayElementAtIndex(selected);
-                var drawAsSingleLine = DrawAsSingleLine(key.propertyType, value.propertyType);
-                if (!drawAsSingleLine)
-                {
-                    rect.y += spaceHeight;
-                    rect.height = EditorGUI.GetPropertyHeight(value, GUIContent.none, value.isExpanded);
-                    EditorGUI.PropertyField(rect, value, GUIContent.none, value.isExpanded);
-                }
-            }
-
-            EditorGUI.EndProperty();
         }
 
         private float GetHeightForPair(SerializedProperty key, SerializedProperty value)
@@ -276,13 +371,13 @@ namespace AillieoUtils
             }
         }
 
-        private float GetHeightForAllPairs()
+        private float GetHeightForAllPairs(ReorderableList reorderableList)
         {
             var height = 0f;
-            var keys = this.serializedProperty.FindPropertyRelative("keys");
-            var values = this.serializedProperty.FindPropertyRelative("values");
+            SerializedProperty keys = this.serializedProperty.FindPropertyRelative("keys");
+            SerializedProperty values = this.serializedProperty.FindPropertyRelative("values");
 
-            height += this.reorderableList.headerHeight;
+            height += reorderableList.headerHeight;
 
             var count = keys.arraySize;
 
@@ -290,9 +385,13 @@ namespace AillieoUtils
             {
                 for (var i = 0; i < count; ++i)
                 {
-                    var key = keys.GetArrayElementAtIndex(i);
-                    var value = values.GetArrayElementAtIndex(i);
+                    SerializedProperty key = keys.GetArrayElementAtIndex(i);
+                    SerializedProperty value = values.GetArrayElementAtIndex(i);
                     height += this.GetHeightForPair(key, value);
+                    if (i != 0)
+                    {
+                        height += EditorGUIUtility.standardVerticalSpacing;
+                    }
                 }
             }
             else
@@ -300,85 +399,8 @@ namespace AillieoUtils
                 height += emptyHeight;
             }
 
-            height += this.reorderableList.footerHeight;
+            height += reorderableList.footerHeight;
             return height;
-        }
-
-        protected void DrawDropArea(Rect position, SerializedProperty property)
-        {
-            var evt = Event.current;
-            var dropArea = position;
-            var guiColor = GUI.color;
-            GUI.color = Color.gray;
-            GUI.Box(dropArea, "Drop objects here to add new entries", new GUIStyle("box") { alignment = TextAnchor.MiddleCenter });
-            GUI.color = guiColor;
-
-            switch (evt.type)
-            {
-                case EventType.DragUpdated:
-                case EventType.DragPerform:
-                    if (dropArea.Contains(evt.mousePosition) &&
-                        DragAndDrop.objectReferences.Any(o => this.valueType.IsInstanceOfType(o)))
-                    {
-                        DragAndDrop.visualMode = DragAndDropVisualMode.Copy;
-
-                        if (evt.type == EventType.DragPerform)
-                        {
-                            DragAndDrop.AcceptDrag();
-
-                            var newObjects = new HashSet<UnityEngine.Object>(DragAndDrop.objectReferences);
-                            var values = property.FindPropertyRelative("values");
-                            for (int i = 0, size = values.arraySize; i < size; ++i)
-                            {
-                                newObjects.Remove(values.GetArrayElementAtIndex(i).objectReferenceValue);
-                            }
-
-                            var newObjectCount = newObjects.Count;
-                            if (newObjectCount > 0)
-                            {
-                                var keys = property.FindPropertyRelative("keys");
-                                var oldSize = keys.arraySize;
-                                keys.arraySize += newObjectCount;
-                                values.arraySize += newObjectCount;
-                                foreach (var newObj in newObjects)
-                                {
-                                    keys.GetArrayElementAtIndex(oldSize).stringValue = newObj.name;
-                                    values.GetArrayElementAtIndex(oldSize).objectReferenceValue = newObj;
-                                    ++oldSize;
-                                }
-                            }
-                        }
-                    }
-
-                    break;
-            }
-        }
-
-        private static Type GetValueType(Type propertyType)
-        {
-            while (propertyType != null)
-            {
-                if (propertyType.IsGenericType && propertyType.GetGenericTypeDefinition() == typeof(SerializableDictionary<,>))
-                {
-                    var genericArgs = propertyType.GenericTypeArguments;
-                    if (genericArgs != null && genericArgs.Length == 2)
-                    {
-                        var valueType = genericArgs[1];
-                        return valueType;
-                    }
-                }
-                else
-                {
-                    propertyType = propertyType.BaseType;
-                }
-            }
-
-            return null;
-        }
-
-        private static bool DrawAsSingleLine(SerializedPropertyType keyType, SerializedPropertyType valueType)
-        {
-            return shortTypes.Contains(keyType) && shortTypes.Contains(valueType);
         }
     }
 }
